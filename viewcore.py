@@ -451,6 +451,20 @@ pre.code .l:target { background: var(--hl); }
 .nb-out .nb-md { margin: 0; }
 iframe.nb-html { display: block; width: 100%; height: 80px; border: 0; margin: 0 0 .6em; background: #fff; border-radius: 6px; }
 pre.nb-raw { color: var(--muted); }
+/* ---- 欢迎页 ---- */
+.wl-form { display: flex; gap: 8px; margin: 1.2em 0 .4em; }
+.wl-form input {
+  flex: 1; min-width: 0; font: inherit; font-size: 16px; padding: 10px 12px; color: var(--fg);
+  background: var(--card); border: 1px solid var(--line); border-radius: 8px;
+}
+.wl-form button {
+  font: inherit; font-size: 16px; padding: 10px 18px; border-radius: 8px; border: 0;
+  background: var(--link); color: #fff; cursor: pointer;
+}
+.wl-err { color: #cf222e; font-size: 14px; margin: 0 0 .8em; }
+.wl-h { font-size: 13px; color: var(--muted); margin: 1.6em 0 .5em; letter-spacing: .04em; }
+.wl-tips { font-size: 14px; color: var(--muted); padding-left: 1.2em; }
+.wl-tips code { font-size: 13px; }
 .imgv img { background: repeating-conic-gradient(var(--code-bg) 0% 25%, transparent 0% 50%) 0 0 / 16px 16px; border-radius: 6px; }
 """
 
@@ -844,6 +858,38 @@ def tree_root(label: str, href: str, inner: str | None, is_cur: bool = False) ->
     if inner is None:
         return f'<li><details class="root" data-p="{href}"><summary>{nm}</summary></details></li>'
     return f'<li{cls}><details class="root" data-p="{href}" open><summary>{nm}</summary>{inner}</details></li>'
+
+
+def link_list(items) -> str:
+    """链接列表。items: [(图标, 文字, 绝对链接, 右侧说明)]"""
+    rows = "".join(
+        f'<li><a href="{href}"><span class="ic">{ic}</span><span class="nm">{html.escape(label)}</span>'
+        f'<span class="meta">{html.escape(meta)}</span></a></li>'
+        for ic, label, href, meta in items)
+    return f'<ul class="listing">{rows}</ul>' if rows else ""
+
+
+def welcome(title: str, intro: str, placeholder: str, sections, *, value: str = "",
+            error: str = "", tips=None) -> str:
+    """欢迎页正文：标题、说明、地址输入框（GET /?u=…）、若干「小标题 + 链接列表」、使用提示。
+
+    sections: [(小标题, link_list 的 items)]；tips: [HTML 片段]
+    """
+    err = f'<p class="wl-err">{html.escape(error)}</p>' if error else ""
+    parts = [
+        f"<h1>{html.escape(title)}</h1><p class='note'>{intro}</p>",
+        '<form class="wl-form" action="/" method="get">'
+        f'<input name="u" value="{html.escape(value)}" placeholder="{html.escape(placeholder)}" '
+        'autocapitalize="off" autocorrect="off" spellcheck="false" required><button>打开</button></form>',
+        err,
+    ]
+    for head, items in sections:
+        if items:
+            parts.append(f'<p class="wl-h">{html.escape(head)}</p>{link_list(items)}')
+    if tips:
+        parts.append('<p class="wl-h">小提示</p><ul class="wl-tips">'
+                     + "".join(f"<li>{t}</li>" for t in tips) + "</ul>")
+    return "".join(parts)
 
 
 def crumbs(items, home: bool = True) -> str:

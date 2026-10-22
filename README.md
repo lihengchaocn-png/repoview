@@ -74,6 +74,8 @@ uv run localview.py notes=~/notes src=~/src # 共享多个目录（名称=路径
 uv run localview.py ~/notes --host 0.0.0.0  # 让同一局域网 / VPN 里的手机、平板访问
 ```
 
+打开首页可以直接输入本机路径或相对路径跳转，下方会列出共享目录和最近修改的文档。
+
 其他参数：`--port`、`--follow-symlinks`（允许符号链接指向共享目录之外）、`--allow-html`（渲染 Markdown 里的原始 HTML）、`-v`（访问日志）。
 
 > 默认只监听本机。用 `--host 0.0.0.0` 后，同一网络里的任何人都能读到共享目录，请只在可信网络里使用。

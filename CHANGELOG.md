@@ -1,5 +1,15 @@
 # 更新记录
 
+## 1.3.2 — 欢迎页
+
+- **localview 首页**：打开 `/` 不再直接跳进共享目录，而是显示欢迎页。
+  - 地址输入框：可以填本机路径（`~/notes/a.md`、绝对路径，带引号也行）、共享目录里的相对路径（`sub/a.md` 或 `共享名/sub/a.md`）或本站网址，回车直接打开文件或文件夹。不在共享目录里的路径会提示，不会越界。
+  - 共享目录：列出所有共享目录及其本机路径。
+  - 最近修改：列出最近修改的 8 个 Markdown / PDF / notebook，可以直接点开。扫描跳过隐藏目录和 `node_modules` 等，最多 6 层、2 万项，结果缓存 60 秒。
+  - 文件页的面包屑开头总是显示 ⌂，可以随时回到首页。
+- **ghview 首页**：改用同一套欢迎页组件，示例增加 notebook、PDF 和 pandas 教程。看不懂的地址会提示，不再静默回到首页。
+- `viewcore` 新增 `welcome()`、`link_list()` 和 `.wl-*` 样式，两个应用共用。
+
 ## 1.3.1 — Jupyter notebook 阅读
 
 加在 `viewcore.py`（`notebook_content()`，由 `serve_file()` 调用），localview 和 ghview 都能用。

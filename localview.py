@@ -26,7 +26,10 @@ from __future__ import annotations
 import argparse
 import html
 import os
+import re
 import sys
+import threading
+import time
 import urllib.parse
 from datetime import datetime
 from pathlib import Path
@@ -53,11 +56,48 @@ def list_dir(d: Path, show_all: bool, keep: str | None = None):
     return rows, hidden
 
 
+RECENT_EXT = V.MD_EXT | V.PDF_EXT | V.NB_EXT
+RECENT_N = 8            # 首页列出最近修改的文件数
+RECENT_SCAN_MAX = 20000  # 扫描上限：目录太大时宁可不全，也不能拖慢首页
+RECENT_DEPTH = 6
+RECENT_TTL = 60
+
+
+def recent_files(roots: dict[str, Path]) -> list[tuple[float, str, str]]:
+    """共享目录里最近修改的 Markdown / PDF / notebook：[(mtime, 根名, 相对路径)]"""
+    found: list[tuple[float, str, str]] = []
+    seen = 0
+    for name, root in roots.items():
+        stack = [(root, 0)]
+        while stack and seen < RECENT_SCAN_MAX:
+            d, depth = stack.pop()
+            try:
+                it = list(os.scandir(d))
+            except OSError:
+                continue
+            for e in it:
+                seen += 1
+                if e.name.startswith(".") or e.name in V.SKIP_NAMES:
+                    continue
+                try:
+                    if e.is_dir(follow_symlinks=False):
+                        if depth < RECENT_DEPTH:
+                            stack.append((Path(e.path), depth + 1))
+                    elif Path(e.name).suffix.lower() in RECENT_EXT:
+                        found.append((e.stat().st_mtime, name, str(Path(e.path).relative_to(root))))
+                except OSError:
+                    continue
+    found.sort(reverse=True)
+    return found[:RECENT_N]
+
+
 class Handler(V.BaseHandler):
     server_version = f"localview/{V.VERSION}"
 
     roots: dict[str, Path] = {}
     follow_symlinks = False
+    _recent: tuple[float, list] = (0.0, [])
+    _recent_lock = threading.Lock()
 
     # ---- 小工具
 
@@ -85,7 +125,7 @@ class Handler(V.BaseHandler):
             items.append((p, href))
         if file:
             items.append((file, ""))
-        return V.crumbs(items, home=len(self.roots) > 1)
+        return V.crumbs(items)
 
     # ---- 目录树
 
@@ -120,8 +160,12 @@ class Handler(V.BaseHandler):
         path = urllib.parse.unquote(split.path)
 
         if path in ("", "/"):
-            if len(self.roots) == 1:
-                return self._redirect(f"/{quote_path(next(iter(self.roots)))}/")
+            if "u" in query:
+                u = query["u"][0]
+                dest = self._resolve_input(u)
+                if dest:
+                    return self._redirect(dest)
+                return self._html(self._home(u, "没找到这个路径：要在共享目录里面，可以填本机路径、相对路径或本站网址"), head)
             return self._html(self._home(), head)
         if path == "/favicon.ico":
             return self._send(204, b"", "image/x-icon", head=head)
@@ -156,15 +200,76 @@ class Handler(V.BaseHandler):
 
     # ---- 页面
 
-    def _home(self) -> bytes:
-        items = "".join(
-            f'<li><a href="/{quote_path(n)}/"><span class="ic">📁</span>'
-            f'<span class="nm">{html.escape(n)}</span>'
-            f'<span class="meta">{html.escape(str(p).replace(str(Path.home()), "~", 1))}</span></a></li>'
-            for n, p in self.roots.items()
-        )
-        return V.page("Markdown", "<b>⌂</b>", f'<ul class="listing">{items}</ul>',
-                      sidebar=self._sidebar(None, [], None))
+    @staticmethod
+    def _tilde(p: Path) -> str:
+        home = str(Path.home())
+        s = str(p)
+        return "~" + s[len(home):] if s == home or s.startswith(home + os.sep) else s
+
+    def _url_for(self, name: str, rel: Path, is_dir: bool) -> str:
+        parts = [p for p in rel.parts if p not in ("", ".")]
+        return f"/{quote_path(name)}/" + "/".join(quote_path(p) for p in parts) + ("/" if is_dir and parts else "")
+
+    def _resolve_input(self, u: str) -> str | None:
+        """把输入框里的内容变成本站地址：本机路径（绝对 / ~ 开头）、本站网址、相对路径都行"""
+        u = u.strip().strip('"').strip("'")
+        if not u:
+            return None
+        if re.match(r"^https?://", u):  # 本站网址：只取路径部分
+            u = urllib.parse.unquote(urllib.parse.urlsplit(u).path)
+        cands: list[tuple[str, Path]] = []
+        p = Path(os.path.expanduser(u))
+        if p.is_absolute():
+            real = p.resolve()
+            for n, root in self.roots.items():
+                if real == root or root in real.parents:
+                    cands.append((n, real.relative_to(root)))
+            # 本站网址的路径（/zl/a/b）也是绝对形式
+            first, _, rest = u.lstrip("/").partition("/")
+            if first in self.roots:
+                cands.append((first, Path(rest)))
+        else:
+            first, _, rest = u.partition("/")
+            if first in self.roots:
+                cands.append((first, Path(rest)))
+            cands += [(n, Path(u)) for n in self.roots]
+        for n, rel in cands:
+            if ".." in rel.parts:
+                continue
+            target = self.roots[n] / rel
+            if target.exists():
+                return self._url_for(n, rel, target.is_dir())
+        return None
+
+    def _recent_cached(self) -> list:
+        with self._recent_lock:
+            t, items = Handler._recent
+            if time.time() - t < RECENT_TTL:
+                return items
+        items = recent_files(self.roots)
+        with self._recent_lock:
+            Handler._recent = (time.time(), items)
+        return items
+
+    def _home(self, value: str = "", error: str = "") -> bytes:
+        roots = [("📁", n, f"/{quote_path(n)}/", self._tilde(p)) for n, p in self.roots.items()]
+        recent = []
+        for mtime, n, rel in self._recent_cached():
+            when = datetime.fromtimestamp(mtime).strftime("%m-%d %H:%M")
+            label = f"{n}/{rel}" if len(self.roots) > 1 else rel
+            recent.append((V.file_icon(rel), label, self._url_for(n, Path(rel), False), when))
+        first = next(iter(self.roots.values()))
+        body = V.welcome(
+            "本地文件阅读器",
+            "输入本机路径或共享目录里的相对路径，直接打开文件或文件夹；也可以从左边的目录树开始浏览。",
+            f"{self._tilde(first)}/… 或 子目录/文件.md",
+            [("共享目录", roots), ("最近修改", recent)],
+            value=value, error=error,
+            tips=[f"支持 <code>{html.escape(self._tilde(first))}/notes/a.md</code> 这样的本机路径、"
+                  "<code>notes/a.md</code> 这样的相对路径，以及本站网址。",
+                  "Mac 上在访达里选中文件按 <code>⌥⌘C</code> 可以拷贝完整路径。",
+                  "Markdown、代码、PDF、Jupyter notebook、图片都能直接看；A− / A+ 调字号。"])
+        return V.page("Markdown", "<b>⌂</b>", body, sidebar=self._sidebar(None, [], None))
 
     def _tree_fragment(self, name: str, rel_parts: list[str], d: Path, head: bool):
         try:

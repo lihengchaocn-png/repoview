@@ -186,17 +186,6 @@ GH = GitHub()
 
 # ---------------------------------------------------------------- 页面
 
-HOME_CSS = """
-<style>
-.gh-form { display: flex; gap: 8px; margin: 1.2em 0 .6em; }
-.gh-form input { flex: 1; min-width: 0; font: inherit; font-size: 16px; padding: 10px 12px; color: var(--fg);
-  background: var(--card); border: 1px solid var(--line); border-radius: 8px; }
-.gh-form button { font: inherit; font-size: 16px; padding: 10px 18px; border-radius: 8px; border: 0;
-  background: var(--link); color: #fff; cursor: pointer; }
-</style>
-"""
-
-
 def from_github_url(u: str) -> str | None:
     """各种形式的 GitHub 地址 → 本站路径"""
     u = re.sub(r"^(?:https?:/+)?(?:www\.)?github\.com/", "", u.strip()).strip("/")
@@ -219,7 +208,11 @@ class Handler(V.BaseHandler):
             return self._send(204, b"", "image/x-icon", head=head)
         if path in ("", "/"):
             if "u" in query:
-                return self._redirect(from_github_url(query["u"][0]) or "/")
+                u = query["u"][0]
+                dest = from_github_url(u)
+                if dest:
+                    return self._redirect(dest)
+                return self._html(self._home(u, "看不懂这个地址，请填 GitHub 仓库或文件的网址，例如 owner/repo"), head)
             return self._html(self._home(), head)
 
         # 直接粘贴整个 GitHub 地址：/https://github.com/o/r/...
@@ -268,18 +261,19 @@ class Handler(V.BaseHandler):
 
     # ---- 首页
 
-    def _home(self) -> bytes:
-        ex = ["karpathy/nanoGPT", "anthropics/anthropic-cookbook", "openai/openai-cookbook"]
-        links = "".join(f'<li><a href="/{e}"><span class="ic">📦</span><span class="nm">{e}</span></a></li>'
-                        for e in ex)
-        body = (
-            HOME_CSS + "<h1>GitHub 仓库阅读器</h1>"
-            "<p class='note'>粘贴 GitHub 仓库或文件地址；也可以把网址里的 github.com 换成本站地址。</p>"
-            '<form class="gh-form" action="/" method="get">'
-            '<input name="u" placeholder="https://github.com/owner/repo" autocapitalize="off" autocorrect="off" '
-            'spellcheck="false" required><button>打开</button></form>'
-            f'<p class="note">示例</p><ul class="listing">{links}</ul>'
-        )
+    def _home(self, value: str = "", error: str = "") -> bytes:
+        ex = [("karpathy/nanoGPT", "README · 代码 · notebook"),
+              ("karpathy/nanoGPT/blob/master/scaling_laws.ipynb", "Jupyter notebook"),
+              ("mml-book/mml-book.github.io/blob/master/book/mml-book.pdf", "417 页 PDF"),
+              ("jakevdp/PythonDataScienceHandbook", "pandas / numpy 教程")]
+        body = V.welcome(
+            "GitHub 仓库阅读器",
+            "粘贴 GitHub 仓库或文件地址；也可以直接把网址里的 <code>github.com</code> 换成本站地址。",
+            "https://github.com/owner/repo", [("示例", [("📦", e, "/" + e, m) for e, m in ex])],
+            value=value, error=error,
+            tips=["支持 <code>owner/repo</code>、<code>github.com/owner/repo/tree/分支/目录</code>、"
+                  "<code>…/blob/分支/文件</code> 等各种写法。",
+                  "PDF 逐页渲染，notebook 显示图表和表格，A− / A+ 调字号。"])
         return V.page("GitHub 阅读器", "<b>⌂</b>", body)
 
     # ---- 面包屑 / 目录树
