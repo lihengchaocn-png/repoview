@@ -1,24 +1,59 @@
 # repoview
 
-`localview` 看本地目录，`ghview` 看 GitHub 仓库。
+**在手机、平板和电脑上，舒服地阅读代码仓库。**
 
-在手机、平板上舒服地阅读 Markdown、代码、PDF 和 Jupyter notebook。服务端渲染好 HTML 直接返回，不依赖外部 CDN，适合弱网。
+Markdown · 代码 · PDF · Jupyter Notebook — 本地目录或任意 GitHub 公开仓库
 
-- **localview**：把本机的目录变成可浏览的网站。
-- **ghview**：阅读 GitHub 公开仓库，不下载仓库，把网址里的 `github.com` 换成本站地址即可。
+![repoview：桌面和手机上阅读 nanoGPT 的 README、PDF 和代码](docs/hero.jpg)
 
-两者共用 `viewcore.py` 里的渲染和界面。
+## 为什么做这个
+
+GitHub 网页在手机上又挤又重：没有目录树，不能调字号，PDF 只能下载，notebook 经常加载失败。repoview 换了个思路：**服务端把所有内容渲染成干净、轻量的 HTML**，浏览器只负责显示。没有 WebSocket，不依赖外部 CDN，弱网下也能用。
+
+两种用法：
+
+| | 用途 | 一行启动 |
+|---|---|---|
+| **ghview** | 阅读任意 GitHub 公开仓库，**不下载仓库**；把网址里的 `github.com` 换成本站地址即可 | `uv run ghview.py` |
+| **localview** | 把本机的笔记、代码、论文目录变成网站，在手机 / 平板上看 | `uv run localview.py ~/notes` |
 
 ## 功能
 
-- **目录树**：类似 VS Code 的侧栏，文件夹按需加载，展开状态记在浏览器本地，可拖宽、可隐藏。
-- **Markdown**：标题目录、front matter、脚注、任务列表、代码高亮。
-- **代码**：行号、语法高亮（Pygments）、长行换行开关。
-- **PDF**：服务端用 PyMuPDF 逐页渲染成图片并懒加载。手机 Safari 内嵌 PDF 只能显示第一页，这样所有页都能看。
-- **Jupyter notebook**：Markdown 单元、代码高亮、文本 / 报错 / 图片输出。pandas 表格等 HTML 输出放在禁止脚本的沙盒 iframe 里显示。
-- **图片**：预览页和原图。
-- **阅读体验**：A− / A+ 调字号、往下滚自动隐藏顶栏、亮暗色自适应。添加到主屏幕后像独立 App，原文件在页内浮层打开，不会“回不去”。
-- **省流量**：每个页面都是普通 HTTP 请求，带 ETag，没改过的内容只返回 304，大文件 gzip 压缩。
+### 📖 为阅读设计
+
+- **一套界面看所有格式**：Markdown、50 多种语言的代码、PDF、Jupyter notebook、图片。
+- **类 VS Code 的目录树**：文件夹按需加载，展开状态自动记住，可拖宽、可隐藏。
+- **字号随手调**：A− / A+ 一键缩放正文、代码和 PDF，设置自动记住。
+- **沉浸阅读**：往下滚自动隐藏顶栏；亮色 / 深色跟随系统。
+- **像原生 App**：可以添加到 iPhone / iPad 主屏幕。「原文件」在页内浮层打开，全屏模式下也不会“回不去”。
+
+### 📕 PDF：手机上也能看全部页面
+
+手机 Safari 内嵌 PDF 只显示第一页。repoview 在服务端用 PyMuPDF 把每页渲染成清晰图片，滚到哪页加载哪页。几百页的书也能流畅翻看，看过的页再打开直接走缓存。
+
+### 📓 Jupyter Notebook：不用启动 Jupyter
+
+![在深色模式下阅读 nanoGPT 的 scaling_laws.ipynb，手机上阅读 pandas 教程](docs/notebook.jpg)
+
+- Markdown 单元、代码高亮、执行序号。
+- matplotlib 图表、pandas DataFrame 表格、文本输出、报错都能显示。
+- HTML 输出放在禁止脚本的沙盒 iframe 里，打开陌生仓库的 notebook 也安全。
+
+### 🐙 GitHub 仓库：改一下网址就能读
+
+```
+https://github.com/karpathy/nanoGPT   →   http://<你的服务器>/karpathy/nanoGPT
+```
+
+- 每个仓库只调一次 GitHub API 拿到整棵文件树，文件内容直接从 raw 取，大约 **2 次 API 调用就能浏览整个仓库**。
+- README 里的相对链接和图片都能正常显示，分支、子目录、文件地址与 GitHub 一一对应。
+- 仓库内容一律按不可信处理：不渲染原始 HTML，原文按纯文本返回，SVG 禁止脚本。
+
+### ⚡ 省流量
+
+- 每个页面都是一次普通的 HTTP 请求。
+- 带 ETag，没改过的内容只返回 304。
+- 文本 gzip 压缩，图片和 PDF 页面懒加载。
 
 ## 安装
 
@@ -78,6 +113,7 @@ https://github.com/owner/repo/blob/main/docs/a.md     →  http://<host>:8091/ow
 | `localview.py` | 本地目录 |
 | `ghview.py` | GitHub 仓库 |
 | `CHANGELOG.md` | 更新记录 |
+| `docs/` | README 用的展示图 |
 | `LICENSE` | MIT 许可证 |
 
 依赖：`markdown-it-py`、`mdit-py-plugins`、`pygments`、`pymupdf`。代码兼容 Python 3.9+。
