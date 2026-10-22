@@ -50,7 +50,7 @@ except ImportError:  # 没有 pymupdf 时 PDF 只能下载原文件，交给浏�
     pymupdf = None
 
 VERSION = "1.3"
-APP_TITLE = "Markdown"  # 添加到主屏幕时的默认名字，各应用可改
+APP_TITLE = "repoview"  # 添加到主屏幕时的默认名字，各应用启动时改成自己的名字
 MD_EXT = {".md", ".markdown", ".mdown", ".mkd"}
 TEXT_EXT = {
     ".txt", ".py", ".pyi", ".sh", ".bash", ".zsh", ".fish", ".js", ".mjs", ".cjs", ".ts", ".tsx",

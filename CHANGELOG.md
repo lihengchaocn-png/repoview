@@ -1,5 +1,10 @@
 # 更新记录
 
+## 1.3.3 — 应用名
+
+- 首页标签页标题和「添加到主屏幕」的默认名字改为各自的应用名：localview → `localview`，ghview → `ghview`（原来是 `Markdown` 和 `GitHub 阅读器` / `GitHub`）。`viewcore.APP_TITLE` 默认值改为 `repoview`。
+- 已经添加到主屏幕的图标不会自动改名，需要删掉重新添加，或长按图标手动改名。
+
 ## 1.3.2 — 欢迎页
 
 - **localview 首页**：打开 `/` 不再直接跳进共享目录，而是显示欢迎页。
@@ -35,7 +40,7 @@
   - `build_id()`（代码指纹）和 `run()`（启动服务）。
 - **`mdserve.py` 改名为 `localview.py`**：只保留本地目录相关的部分（共享目录、`list_dir`、符号链接检查、隐藏文件、目录 ETag）。
 - **`ghview.py` 改为基于 `viewcore`**：只保留 GitHub 访问、缓存和路由。
-- 两个应用的 ETag 都带上 `viewcore.py` 和自身文件的指纹，改哪个文件都会让页面失效。添加到主屏幕时的默认名字分别是「Markdown」和「GitHub」。
+- 两个应用的 ETag 都带上 `viewcore.py` 和自身文件的指纹，改哪个文件都会让页面失效。添加到主屏幕时的默认名字分别是「localview」和「ghview」（1.3.3 起；之前是「Markdown」和「GitHub」）。
 - 默认只监听 `127.0.0.1`；localview 不带参数时共享当前目录。
 
 ## 1.2.1 — ghview：GitHub 仓库阅读器

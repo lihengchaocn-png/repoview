@@ -274,7 +274,7 @@ class Handler(V.BaseHandler):
             tips=["支持 <code>owner/repo</code>、<code>github.com/owner/repo/tree/分支/目录</code>、"
                   "<code>…/blob/分支/文件</code> 等各种写法。",
                   "PDF 逐页渲染，notebook 显示图表和表格，A− / A+ 调字号。"])
-        return V.page("GitHub 阅读器", "<b>⌂</b>", body)
+        return V.page("ghview", "<b>⌂</b>", body)
 
     # ---- 面包屑 / 目录树
 
@@ -353,7 +353,7 @@ def main():
     ap.add_argument("-v", "--verbose", action="store_true", help="打印访问日志")
     args = ap.parse_args()
 
-    V.APP_TITLE = "GitHub"
+    V.APP_TITLE = "ghview"
     Handler.verbose = args.verbose
     Handler.md = V.build_markdown(False)  # 仓库内容不可信：不渲染原始 HTML，避免 XSS
     Handler.build = V.build_id(V.__file__, __file__)

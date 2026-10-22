@@ -269,7 +269,7 @@ class Handler(V.BaseHandler):
                   "<code>notes/a.md</code> 这样的相对路径，以及本站网址。",
                   "Mac 上在访达里选中文件按 <code>⌥⌘C</code> 可以拷贝完整路径。",
                   "Markdown、代码、PDF、Jupyter notebook、图片都能直接看；A− / A+ 调字号。"])
-        return V.page("Markdown", "<b>⌂</b>", body, sidebar=self._sidebar(None, [], None))
+        return V.page("localview", "<b>⌂</b>", body, sidebar=self._sidebar(None, [], None))
 
     def _tree_fragment(self, name: str, rel_parts: list[str], d: Path, head: bool):
         try:
@@ -372,6 +372,7 @@ def main():
 
     banner = [f"localview {V.VERSION}  →  http://{args.host}:{args.port}/"]
     banner += [f"  /{n}/  →  {p}" for n, p in Handler.roots.items()]
+    V.APP_TITLE = "localview"
     V.run(Handler, args.host, args.port, banner)
 
 
