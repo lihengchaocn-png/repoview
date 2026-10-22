@@ -49,7 +49,7 @@ try:
 except ImportError:  # 没有 pymupdf 时 PDF 只能下载原文件，交给浏览器自带的阅读器
     pymupdf = None
 
-VERSION = "1.3"
+VERSION = "1.4"
 APP_TITLE = "repoview"  # 添加到主屏幕时的默认名字，各应用启动时改成自己的名字
 MD_EXT = {".md", ".markdown", ".mdown", ".mkd"}
 TEXT_EXT = {
@@ -426,6 +426,16 @@ pre.code .l:target { background: var(--hl); }
 }
 #rv .rvh a:hover { text-decoration: none; }
 #rv iframe { flex: 1; width: 100%; border: 0; background: #fff; }
+/* ---- 刷新 ---- */
+button.ib.spin { animation: rfspin .8s linear infinite; pointer-events: none; }
+@keyframes rfspin { to { transform: rotate(360deg); } }
+.toast {
+  position: fixed; left: 50%; bottom: max(24px, env(safe-area-inset-bottom)); z-index: 60;
+  transform: translateX(-50%); padding: 8px 16px; border-radius: 999px; font-size: 14px;
+  background: var(--fg); color: var(--bg); box-shadow: 0 4px 16px rgba(0,0,0,.2);
+  transition: opacity .3s; pointer-events: none;
+}
+.toast.out { opacity: 0; }
 .pdfv { overflow-x: auto; -webkit-overflow-scrolling: touch; }
 .pdfv img {
   display: block; width: calc(100% * var(--fz, 1)); max-width: none; height: auto; margin: 0 auto 14px;
@@ -521,12 +531,50 @@ if(hd&&mn)mn.addEventListener('scroll',function(){
   if(y<40)hide(false);else if(dy>10)hide(true);else if(dy<-10)hide(false);
   if(Math.abs(dy)>10||y<40)last=y;
 },{passive:true});
-var nbh=d.querySelectorAll('iframe.nb-html');
-function nbfit(){nbh.forEach(function(f){try{f.style.height=(f.contentDocument.documentElement.scrollHeight+4)+'px'}catch(_){}})}
-nbh.forEach(function(f){f.addEventListener('load',nbfit)});if(nbh.length){nbfit();window.addEventListener('resize',nbfit)}
+function nbfit(){d.querySelectorAll('iframe.nb-html').forEach(function(f){try{f.style.height=(f.contentDocument.documentElement.scrollHeight+4)+'px'}catch(_){}})}
+window.addEventListener('resize',nbfit);
+// 正文里需要绑定事件的部分；刷新替换正文后要再执行一次
+function initMain(){
+  d.querySelectorAll('iframe.nb-html').forEach(function(f){f.addEventListener('load',nbfit)});nbfit();
+  var wr=d.getElementById('wr');
+  if(wr)wr.onclick=function(){put('mds.wrap',de.classList.toggle('cwrap')?'1':'0')};
+}
+initMain();
+// ---- 刷新：后台重新取当前页面，只替换需要的部分，滚动位置、目录树展开状态都保留
+var forcing=false;
+function toast(t){
+  var x=d.createElement('div');x.className='toast';x.textContent=t;d.body.appendChild(x);
+  setTimeout(function(){x.classList.add('out')},1400);setTimeout(function(){x.remove()},1800);
+}
+function refresh(what,btn){  // what: 'main' 只刷正文，'tree' 只刷目录树，'all' 都刷
+  if(btn)btn.classList.add('spin');
+  forcing=true;
+  fetch(location.pathname+location.search,{cache:'no-cache',credentials:'same-origin',headers:{'X-Refresh':'1'}})
+  .then(function(r){if(!r.ok)throw new Error(r.status);return r.text()})
+  .then(function(h){
+    var nd=new DOMParser().parseFromString(h,'text/html'),msg='没有变化';
+    if(what!=='tree'){
+      var m=d.querySelector('main'),nm=nd.querySelector('main');
+      if(m&&nm&&m.innerHTML!==nm.innerHTML){
+        var y=mn?mn.scrollTop:0;m.innerHTML=nm.innerHTML;d.title=nd.title;if(mn)mn.scrollTop=y;initMain();msg='已更新';
+      }
+    }
+    var tr=sb&&sb.querySelector('.tree'),nt=nd.querySelector('#sb .tree');
+    if(what!=='main'&&tr&&nt){
+      var ty=tr.scrollTop;tr.innerHTML=nt.innerHTML;restore(tr);tr.scrollTop=ty;
+      if(what==='tree')msg='目录已刷新';
+    }
+    toast(msg);
+  })
+  .catch(function(){toast('刷新失败，请检查网络')})
+  .then(function(){forcing=false;if(btn)btn.classList.remove('spin')});
+}
+var rf=d.getElementById('rf');
+// 目录页（地址以 / 结尾）正文和目录树一起刷新；文件页只刷新这个文件
+if(rf)rf.onclick=function(){refresh(/\/$/.test(location.pathname)?'all':'main',rf)};
+var rt=d.getElementById('rt');
+if(rt)rt.onclick=function(){refresh('tree',rt)};
 var bd=d.getElementById('bd');if(bd)bd.onclick=function(){de.classList.remove('sbo')};
-var wr=d.getElementById('wr');
-if(wr)wr.onclick=function(){put('mds.wrap',de.classList.toggle('cwrap')?'1':'0')};
 if(!sb)return;
 var tree=sb.querySelector('.tree');
 var open;try{open=new Set(JSON.parse(get('mds.open')||'[]'))}catch(_){open=new Set()}
@@ -536,7 +584,7 @@ function load(det){
   for(var c=det.firstElementChild;c;c=c.nextElementSibling)if(c.tagName==='UL'){det.dataset.st='ok';return}
   det.dataset.st='ld';
   var ph=d.createElement('div');ph.className='ph';ph.textContent='加载中…';det.appendChild(ph);
-  fetch(det.dataset.p+'?tree',{credentials:'same-origin'}).then(function(r){
+  fetch(det.dataset.p+'?tree',forcing?{cache:'no-cache',credentials:'same-origin',headers:{'X-Refresh':'1'}}:{credentials:'same-origin'}).then(function(r){
     if(!r.ok)throw new Error(r.status);return r.text()
   }).then(function(h){
     ph.remove();det.insertAdjacentHTML('beforeend',h);det.dataset.st='ok';restore(det);
@@ -582,6 +630,7 @@ def page(title: str, crumbs: str, body: str, sidebar: str = "", wide: bool = Fal
     toggle = '<button class="ib" id="tg" title="显示/隐藏目录栏">☰</button>' if sidebar else ""
     side = (
         f'<aside id="sb"><div class="sbh"><span>资源管理器</span>'
+        f'<button class="ib" id="rt" title="刷新目录树">↻</button>'
         f'<button class="ib" id="ca" title="全部折叠">⊟</button></div>'
         f'<nav class="tree">{sidebar}</nav><div id="sbr"></div></aside><div id="bd"></div>'
         if sidebar else ""
@@ -598,7 +647,7 @@ def page(title: str, crumbs: str, body: str, sidebar: str = "", wide: bool = Fal
 <script>{HEAD_JS}</script>
 <style>{BASE_CSS}{PYG_CSS}</style>
 </head><body>
-<header>{toggle}<div class="cr">{crumbs}</div><button class="ib fz" id="fzd" title="缩小字体（双击复位）">A−</button><button class="ib fz" id="fzu" title="放大字体（双击复位）">A+</button></header>
+<header>{toggle}<div class="cr">{crumbs}</div><button class="ib" id="rf" title="刷新（目录页刷新列表和目录树，文件页只刷新这个文件）">⟳</button><button class="ib fz" id="fzd" title="缩小字体（双击复位）">A−</button><button class="ib fz" id="fzu" title="放大字体（双击复位）">A+</button></header>
 <div class="wrap">{side}<div id="main"><main{' class="wide"' if wide else ''}>{body}</main></div></div>
 <script>{BODY_JS}</script>
 </body></html>"""
@@ -937,6 +986,11 @@ class BaseHandler(BaseHTTPRequestHandler):
 
     def _html(self, body: bytes, head=False, etag=None, status=200):
         self._send(status, body, "text/html; charset=utf-8", head=head, etag=etag)
+
+    @property
+    def forced(self) -> bool:
+        """页面上点了刷新：应用应跳过自己的缓存（但仍可用 ETag 让上游返回 304）"""
+        return self.headers.get("X-Refresh") == "1"
 
     def _etag(self, *parts) -> str:
         return '"' + "-".join([VERSION, self.build] + [str(p) for p in parts]) + '"'

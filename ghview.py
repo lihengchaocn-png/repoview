@@ -124,11 +124,11 @@ class GitHub:
         self.raw_cache: OrderedDict[str, tuple[float, bytes]] = OrderedDict()
         self.raw_size = 0
 
-    def _api(self, path: str, ttl: int) -> dict:
+    def _api(self, path: str, ttl: int, force: bool = False) -> dict:
         url = "https://api.github.com" + path
         with self.lock:
             hit = self.api_cache.get(url)
-        if hit and time.time() - hit[0] < ttl:
+        if hit and time.time() - hit[0] < ttl and not force:
             return hit[2]
         # 过期后带 ETag 去问：没变化时 GitHub 返回 304，不占限额
         status, headers, body = _get(url, api=True, etag=hit[1] if hit else None, limit=64 * 1024 * 1024)
@@ -140,15 +140,15 @@ class GitHub:
     def default_branch(self, owner: str, repo: str) -> str:
         return self._api(f"/repos/{owner}/{repo}", 3600)["default_branch"]
 
-    def repo(self, owner: str, repo: str, ref: str) -> Repo:
+    def repo(self, owner: str, repo: str, ref: str, force: bool = False) -> Repo:
         key = ("repo", owner, repo, ref)
         miss = ("miss",) + key
         with self.lock:
             m = self.api_cache.get(miss)
-        if m and time.time() - m[0] < TREE_TTL:  # 不存在的 ref 也缓存，免得反复消耗限额
+        if m and time.time() - m[0] < TREE_TTL and not force:  # 不存在的 ref 也缓存，免得反复消耗限额
             raise GHError(404, "没有这个分支")
         try:
-            data = self._api(f"/repos/{owner}/{repo}/git/trees/{quote_path(ref)}?recursive=1", TREE_TTL)
+            data = self._api(f"/repos/{owner}/{repo}/git/trees/{quote_path(ref)}?recursive=1", TREE_TTL, force)
         except GHError as e:
             if e.status == 404:
                 with self.lock:
@@ -252,7 +252,7 @@ class Handler(V.BaseHandler):
         last = None
         for n in range(1, min(len(rest), 4) + 1):
             try:
-                return GH.repo(owner, repo, "/".join(rest[:n])), "/".join(rest[n:])
+                return GH.repo(owner, repo, "/".join(rest[:n]), self.forced), "/".join(rest[n:])
             except GHError as e:
                 if e.status != 404:
                     raise

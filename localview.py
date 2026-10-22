@@ -244,7 +244,7 @@ class Handler(V.BaseHandler):
     def _recent_cached(self) -> list:
         with self._recent_lock:
             t, items = Handler._recent
-            if time.time() - t < RECENT_TTL:
+            if time.time() - t < RECENT_TTL and not self.forced:
                 return items
         items = recent_files(self.roots)
         with self._recent_lock:
